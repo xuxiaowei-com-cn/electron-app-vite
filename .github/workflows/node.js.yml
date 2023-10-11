@@ -1,0 +1,231 @@
+# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
+
+name: Node.js CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        node-version: [ 18.x ]
+        os: [ "ubuntu-latest", "windows-latest", "macos-latest" ]
+        arch: [ x64, arm64 ]
+        exclude:
+          - arch: arm64
+            os: ubuntu-latest
+          - arch: arm64
+            os: windows-latest
+
+    env:
+      # npm 缓存路径
+      NPM_CONFIG_CACHE: ~/.cache
+      # electron 缓存路径
+      ELECTRON_CACHE: ~/.electron/cache
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Print Environment Variables
+        run: |
+          echo $NPM_CONFIG_CACHE
+          echo $ELECTRON_CACHE
+
+      - name: Use Node.js ${{ matrix.node-version }} !(macos-latest arm64)
+        uses: actions/setup-node@v3
+        if: ${{ !(matrix.os == 'macos-latest' && matrix.arch == 'arm64') }}
+        with:
+          node-version: ${{ matrix.node-version }}
+          architecture: ${{ matrix.arch }}
+
+      # macos、arm64 默认为 node v18.16.0（不能设置 node-version 否则无法执行）
+      - name: Use Node.js ${{ matrix.node-version }} macos-latest arm64
+        uses: actions/setup-node@v3
+        if: ${{ matrix.os == 'macos-latest' && matrix.arch == 'arm64' }}
+        with:
+          architecture: ${{ matrix.arch }}
+
+      - name: Cache modules
+        uses: actions/cache@v3
+        id: cache-modules
+        with:
+          path: |
+            ~/.npm
+            ~/.cache
+            ~/.electron/cache
+          key: ${{ matrix.os }}-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ matrix.os }}-
+
+
+      - run: node -v
+      - run: echo '' > .npmrc
+      - run: npm i
+      - run: npm run build
+
+      - name: make (macos-latest x64)
+        if: ${{ matrix.os == 'macos-latest' && matrix.arch == 'x64' }}
+        run: |
+          npm run make
+
+      - name: make (macos-latest arm64)
+        if: ${{ matrix.os == 'macos-latest' && matrix.arch == 'arm64' }}
+        run: |
+          npm run make
+
+      - name: make (windows-latest)
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          npm run make
+
+      - name: make (ubuntu-latest)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          npm run make
+
+      - run: ls out/make
+      - name: Ubuntu ls make
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: ls out/make/*/*
+      - name: macOS ls make
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: ls out/make/*/*
+      - name: Windows ls make
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: Get-ChildItem -Path ./out/make/*/* -Directory | ForEach-Object { Get-ChildItem -Path $_.FullName }
+
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: electron-app-vite-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            out/make/*/*.exe
+            out/make/*/*.deb
+            out/make/*/*.rpm
+
+
+  # https://docs.github.com/zh/enterprise-cloud@latest/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions
+  dependabot:
+    name: Dependabot
+    # 需要所有 build 完成后，才运行
+    needs: build
+    runs-on: ${{ matrix.os }}
+    permissions:
+      # 可以修改仓库中的文件内容
+      contents: write
+      # # 可以新建或修改 Pull Request
+      pull-requests: write
+    # 依赖机器人 && 仅PR
+    if: ${{ github.actor == 'dependabot[bot]' && github.event_name == 'pull_request' }}
+
+    strategy:
+      matrix:
+        os: [ "ubuntu-latest" ]
+
+    steps:
+      # 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          # 获取所有的代码历史记录，包括分支和标签
+          fetch-depth: 0
+
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v1
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: echo
+        run: |
+          echo ${{ github.event.pull_request.html_url }}
+          echo ${{ steps.metadata.outputs.dependency-names }}
+          echo ${{ steps.metadata.outputs.update-type }}
+          echo ${{ 'version-update:semver-patch' }}
+
+      - name: Enable auto-merge for Dependabot PRs
+        # if: ${{contains(steps.metadata.outputs.dependency-names, 'my-dependency') && steps.metadata.outputs.update-type == 'version-update:semver-patch'}}
+        run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 将 main 分支代码同步到 极狐GitLab
+      - name: Sync JihuLab
+        run: |
+          git config --global user.email "xuxiaowei@xuxiaowei.com.cn"
+          git config --global user.name "徐晓伟"
+          # 设置 SSH 秘钥
+          mkdir -p ~/.ssh
+          echo "${{ secrets.JIHULAB_ID_RSA }}" >> ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          eval $(ssh-agent -s) && ssh-add ~/.ssh/id_rsa
+          # 信任域名
+          ssh-keyscan -H jihulab.com >> ~/.ssh/known_hosts
+          # 切换 main 分支
+          git checkout main
+          # 拉取 main 分支
+          git pull origin main
+          # 查看远端 极狐GitLab
+          echo git@jihulab.com:$GITHUB_REPOSITORY.git
+          # 添加远端 极狐GitLab
+          git remote add jihulab git@jihulab.com:$GITHUB_REPOSITORY.git
+          # 拉取 main 分支
+          git pull --progress -v --no-rebase jihulab main
+          # 推送 main 分支
+          git push --progress jihulab main:main
+
+  sync:
+    name: Sync
+    # 需要所有 build 完成后，才运行
+    needs: build
+    # 仅在推送代码时执行
+    if: github.event_name == 'push'
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ "ubuntu-latest" ]
+
+    steps:
+      # 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          # 获取所有的代码历史记录，包括分支和标签
+          fetch-depth: 0
+
+      # 将代码同步到 极狐GitLab
+      - name: Sync JihuLab
+        run: |
+          git config --global user.email "xuxiaowei@xuxiaowei.com.cn"
+          git config --global user.name "徐晓伟"
+          # 设置 SSH 秘钥
+          mkdir -p ~/.ssh
+          echo "${{ secrets.JIHULAB_ID_RSA }}" >> ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          eval $(ssh-agent -s) && ssh-add ~/.ssh/id_rsa
+          # 信任域名
+          ssh-keyscan -H jihulab.com >> ~/.ssh/known_hosts
+          # 查看当前分支
+          echo 当前分支：$GITHUB_REF_NAME
+          # 查看远端 极狐GitLab
+          echo git@jihulab.com:$GITHUB_REPOSITORY.git
+          # 添加远端 极狐GitLab
+          git remote add jihulab git@jihulab.com:$GITHUB_REPOSITORY.git
+          # 拉取
+          git pull --progress -v --no-rebase jihulab $GITHUB_REF_NAME
+          # 推送当前分支
+          git push --progress jihulab $GITHUB_REF_NAME:$GITHUB_REF_NAME
