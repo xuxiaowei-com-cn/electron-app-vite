@@ -99,7 +99,10 @@ jobs:
         run: ls out/make/*/*
       - name: macOS ls make
         if: ${{ matrix.os == 'macos-latest' }}
-        run: ls out/make/*/*
+        run: |
+          ls out/make
+          ls out/make/zip
+          ls out/make/zip/x64
       - name: Windows ls make
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
