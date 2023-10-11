@@ -71,7 +71,7 @@ jobs:
       - run: node -v
       - run: echo '' > .npmrc
       - run: npm i
-      - run: npm run build
+      - run: npm run package
 
       - name: make (macos-latest x64)
         if: ${{ matrix.os == 'macos-latest' && matrix.arch == 'x64' }}
