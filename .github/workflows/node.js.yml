@@ -103,6 +103,7 @@ jobs:
           ls out/make
           ls out/make/zip
           ls out/make/zip/darwin
+          ls out/make/zip/darwin/x64
       - name: Windows ls make
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
