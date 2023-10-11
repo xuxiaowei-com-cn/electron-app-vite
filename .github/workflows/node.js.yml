@@ -118,6 +118,7 @@ jobs:
             out/make/*/*/*.exe
             out/make/*/*/*.deb
             out/make/*/*/*.rpm
+            out/make/*/*/*/*.zip
 
 
   # https://docs.github.com/zh/enterprise-cloud@latest/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions
