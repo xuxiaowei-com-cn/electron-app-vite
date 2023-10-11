@@ -1,5 +1,7 @@
 stages:
   - build
+  # 代码同步
+  - sync
 
 build:yarn:node:18.16.0:
   stage: build
@@ -68,3 +70,8 @@ build:npm:node:18.16.0:
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
     # PR 合并到 main 后执行、推送到 main 分支时
     - if: $CI_COMMIT_BRANCH == "main"
+
+# 嵌入
+include:
+  # 同步代码
+  - /sync.yml
