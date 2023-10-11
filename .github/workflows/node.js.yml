@@ -111,9 +111,9 @@ jobs:
         with:
           name: electron-app-vite-${{ matrix.os }}-${{ matrix.arch }}
           path: |
-            out/make/*/*.exe
-            out/make/*/*.deb
-            out/make/*/*.rpm
+            out/make/*/*/*.exe
+            out/make/*/*/*.deb
+            out/make/*/*/*.rpm
 
 
   # https://docs.github.com/zh/enterprise-cloud@latest/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions
